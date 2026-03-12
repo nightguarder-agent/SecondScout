@@ -71,8 +71,8 @@ Host for free on [Pockethost.io](https://pockethost.io/).
 
 ### 2. Frontend (SvelteKit)
 Deploy to **Vercel** or **Netlify** (Free Tiers).
-- **Vercel**: Automatically uses `vercel.json` for 30min Cron Jobs.
-- **Netlify**: Use an external pinger (like `cron-job.org`) to hit `/api/cron?cron_secret=...` every 30 mins.
+- **Vercel**: Automatically uses `vercel.json` for daily Cron Jobs.
+- **Netlify**: Use an external pinger (like `cron-job.org`) to hit `/api/cron?cron_secret=...` daily.
 
 ## 🛠️ Built With
 - **Svelte 5** (Runes)
