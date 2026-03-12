@@ -1,6 +1,6 @@
-# DealHunter MVP
+# 🎯 DealHunter
 
-A local, containerized second-hand market aggregator for "power users" in DE and CZ.
+A high-performance second-hand market aggregator (Bazos & more) built for power users.
 
 ## Prerequisites
 
@@ -9,8 +9,9 @@ A local, containerized second-hand market aggregator for "power users" in DE and
 
 ## Quick Start (Docker)
 
-1.  **Start the services**:
+1.  **Clone & Start**:
     ```bash
+    cd backend
     docker-compose up -d
     ```
     This will start:
@@ -55,11 +56,31 @@ A local, containerized second-hand market aggregator for "power users" in DE and
 ## Development
 
 To run locally for testing purposes:
-```bash
-# Start PocketBase via Docker
-docker-compose up -d pocketbase
+    ```bash
+    PUBLIC_POCKETBASE_URL=http://127.0.0.1:8090
+    PB_ADMIN_EMAIL=your_email
+    PB_ADMIN_PASSWORD=your_password
+    CRON_SECRET=your_random_secret
+    ```
 
-# Start App
-npm install
-npm run dev
-```
+## ☁️ Deployment (Free Tier)
+
+### 1. Database (PocketBase)
+Host for free on [Pockethost.io](https://pockethost.io/). 
+- Set `PUBLIC_POCKETBASE_URL` in your prod environment to your Pockethost URL.
+
+### 2. Frontend (SvelteKit)
+Deploy to **Vercel** or **Netlify** (Free Tiers).
+- **Vercel**: Automatically uses `vercel.json` for 30min Cron Jobs.
+- **Netlify**: Use an external pinger (like `cron-job.org`) to hit `/api/cron?cron_secret=...` every 30 mins.
+
+## 🛠️ Built With
+- **Svelte 5** (Runes)
+- **Tailwind CSS v4**
+- **PocketBase** (SQLite backend)
+- **Vite 7**
+
+---
+> [!TIP]
+> **Scraping Note**: Ensure your `CRON_SECRET` is set in production to prevent unauthorized scraper triggers!
+
