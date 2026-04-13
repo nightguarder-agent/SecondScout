@@ -1,3 +1,4 @@
+import axios from 'axios';
 import * as cheerio from 'cheerio';
 import type { SearchResult } from '../../scraper';
 
@@ -9,95 +10,153 @@ export class SbazarScraper {
             const url = `${this.baseUrl}/hledej/${encodeURIComponent(query)}`;
             console.log(`[Sbazar] Fetching: ${url}`);
 
-            const response = await fetch(url, {
+            const response = await axios.get(url, {
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                }
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                },
+                timeout: 10000,
+                maxRedirects: 5,
             });
 
-            if (!response.ok) {
-                console.error(`[Sbazar] Request failed with status ${response.status} ${response.statusText}`);
+            const html = response.data;
+            
+            // Debug: check if we got actual content or a challenge page
+            if (html.includes('id="challenge-running"')) {
+                console.error('[Sbazar] Cloudflare/Seznam challenge detected');
                 return [];
             }
 
-            const html = await response.text();
             const $ = cheerio.load(html);
+            
+            // Astro serializes data into component props. 
+            // The SearchPageList component contains the actual listings.
+            const island = $('astro-island[component-export="SearchPageList"]').first();
+            const propsStr = island.attr('props');
+
+            if (!propsStr) {
+                console.warn(`[Sbazar] SearchPageList island or props not found. HTML length: ${html.length}`);
+                return [];
+            }
+
+            // Decode and parse props
+            const decodedProps = propsStr.replace(/&quot;/g, '"')
+                                         .replace(/&amp;/g, '&')
+                                         .replace(/&lt;/g, '<')
+                                         .replace(/&gt;/g, '>');
+            
+            const props = JSON.parse(decodedProps);
+
+            // Unwrapping helper for Seznam/Astro serialization format: [0, value] or [1, [items]]
+            const unwrap = (val: any): any => {
+                if (Array.isArray(val)) {
+                    // Seznam format: [type, value]
+                    // type 0: primitive/object, type 1: array, type 2: Map?, etc.
+                    if (val.length === 2 && (val[0] === 0 || val[0] === 1)) {
+                        return unwrap(val[1]);
+                    }
+                    return val.map(unwrap);
+                }
+                if (typeof val === 'object' && val !== null) {
+                    const res: any = {};
+                    for (const key in val) {
+                        res[key] = unwrap(val[key]);
+                    }
+                    return res;
+                }
+                return val;
+            };
+
+            const data = unwrap(props);
+            
+            // Recursively find the listings array
+            let offers: any[] = [];
+            
+            const findOffers = (obj: any) => {
+                if (!obj || typeof obj !== 'object') return;
+                
+                // Check if this object has an array that looks like listings
+                const keys = ['offers', 'results', 'items'];
+                for (const key of keys) {
+                    if (Array.isArray(obj[key]) && obj[key].length > 0) {
+                        const first = obj[key][0];
+                        if (first && typeof first === 'object' && (first.name || first.id || first.title)) {
+                            offers = obj[key];
+                            return;
+                        }
+                    }
+                }
+
+                // If it's an array, check its items
+                if (Array.isArray(obj)) {
+                    for (const item of obj) {
+                        if (offers.length > 0) return;
+                        findOffers(item);
+                    }
+                } else {
+                    // Recurse into object properties
+                    for (const key in obj) {
+                        if (offers.length > 0) return;
+                        findOffers(obj[key]);
+                    }
+                }
+            };
+            
+            findOffers(data);
+
             const results: SearchResult[] = [];
+            
+            for (const offer of offers) {
+                // Some items might be ads or have different structures
+                if (!offer || typeof offer !== 'object') continue;
+                
+                const title = offer.name || offer.title;
+                if (!title) continue;
 
-            // Targeted selection based on browser research
-            // We select the card container. The class list is complex, so we >> use a partial match or the container query class
-            // Using a broader selector and filtering is safer.
-            // .offer-card seems to be a reliable class for both ads and items
-            $('.offer-card').each((_, element) => {
-                const el = $(element);
+                const price = offer.price || 0;
+                const id = offer.id;
+                const seoName = offer.seoName;
+                
+                // Construct link
+                let link = '';
+                if (seoName) {
+                    link = `${this.baseUrl}/inzerat/${seoName}`;
+                } else if (id) {
+                    link = `${this.baseUrl}/inzerat/${id}`;
+                } else {
+                    continue;
+                }
+                
+                // Get first image
+                let imageUrl = '';
+                if (offer.images && Array.isArray(offer.images) && offer.images.length > 0) {
+                    const firstImg = offer.images[0];
+                    imageUrl = typeof firstImg === 'string' ? firstImg : (firstImg.url || firstImg.src || '');
+                    
+                    if (imageUrl && !imageUrl.startsWith('http')) {
+                        imageUrl = `https:${imageUrl.startsWith('//') ? '' : '//'}${imageUrl}`;
+                    }
 
-                // --- 1. Ad Filtering ---
-
-                // Check for Ad ID on the parent list item (often <li id="firstMoneyOffer-...">)
-                const parentLi = el.closest('li');
-                const parentId = parentLi.attr('id') || '';
-                if (parentId.includes('MoneyOffer')) {
-                    return; // Skip ads
+                    // Seznam (sdn.cz) strictness: "original" images return 401 on hotlinking.
+                    // Appending a specific transformation profile (fl) allows them to be served.
+                    if (imageUrl && imageUrl.includes('sdn.cz') && !imageUrl.includes('?')) {
+                        imageUrl += '?fl=exf|crr,1.33333,2|res,640,480,1|wrm,/watermark/sbazar.png,10,10|webp,75';
+                    }
                 }
 
-                // Check link for ad domains
-                // The link is usually the direct parent <a> of the .offer-card, or inside it
-                const anchor = el.closest('a').length ? el.closest('a') : el.find('a').first();
-                const linkHref = anchor.attr('href') || '';
+                results.push({
+                    title,
+                    price,
+                    source: 'Sbazar.cz',
+                    region: 'CZ',
+                    link,
+                    description: offer.locality?.municipality || offer.description || '',
+                    imageUrl
+                });
+            }
 
-                if (linkHref.includes('c.seznam.cz') || linkHref.includes('ssp.seznam.cz')) {
-                    return; // Skip ads like Sreality
-                }
-
-                // --- 2. Data Extraction ---
-
-                // Title: Found in .text-red (sometimes) or more reliably checking the bold text or the text inside the main block
-                // Based on research: <div class="text-red ...">Title</div>
-                let title = el.find('.text-red').text().trim();
-
-                // Fallback: finding the bold text which often contains the item name if .text-red fails or is "Rezervace"
-                if (!title) {
-                    title = el.find('b, strong').first().text().trim();
-                }
-
-                const fullLink = linkHref.startsWith('http') ? linkHref : `${this.baseUrl}${linkHref}`;
-
-                // Price: look for bold tag or specific price classes
-                let price = 0;
-                // Often price is in a <b> tag or specific container
-                const priceText = el.find('.text-neutral-black, b').text().trim();
-                // Extract numbers
-                const priceMatch = priceText.match(/([\d\s]+)\s*Kč/);
-                if (priceMatch) {
-                    price = parseInt(priceMatch[1].replace(/\s/g, ''));
-                } else if (priceText.toLowerCase().includes('dohodou')) {
-                    price = 0; // Negotiable
-                }
-
-                // Location
-                const description = el.find('.text-dark-blue-50').text().trim();
-
-                // Image
-                const imgEl = el.find('img');
-                let imageUrl = imgEl.attr('src');
-                if (!imageUrl || imageUrl.includes('data:image')) {
-                    imageUrl = imgEl.attr('data-src') || imgEl.attr('srcset')?.split(' ')[0];
-                }
-
-                if (title && fullLink !== '#') {
-                    if (maxPrice && price > maxPrice) return;
-
-                    results.push({
-                        title,
-                        price,
-                        source: 'Sbazar.cz',
-                        region: 'CZ',
-                        link: fullLink,
-                        description,
-                        imageUrl
-                    });
-                }
-            });
+            if (maxPrice) {
+                return results.filter(r => r.price <= maxPrice);
+            }
 
             return results;
 

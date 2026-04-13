@@ -38,38 +38,39 @@ export class AukroScraper {
             // Common container for legacy/standard view: .list-page-item or .card-item
 
             // Try generic product card
-            const items = $('article.list-card');
-            console.log(`[Aukro] Found ${items.length} items with selector article.list-card`);
+            const items = $('.item-card');
+            console.log(`[Aukro] Found ${items.length} items with selector .item-card`);
 
             items.each((_, element) => {
                 const el = $(element);
+                const titleEl = el.find('h2');
+                const priceEl = el.find('auk-item-card-price');
+                const imgEl = el.find('img');
+                const link = el.attr('href');
 
-                const titleEl = el.find('h2.list-card-title');
-                const linkEl = el.find('a.list-card-link'); // often the whole card or title
-                const priceEl = el.find('.list-card-price-amount');
-                const imgEl = el.find('.list-card-img img');
-
-                if (titleEl.length > 0) {
+                if (titleEl.length > 0 && link) {
                     const title = titleEl.text().trim();
-                    const link = linkEl.attr('href');
-                    const fullLink = link ? (link.startsWith('http') ? link : `${this.baseUrl}${link}`) : '#';
+                    const fullLink = link.startsWith('http') ? link : `${this.baseUrl}${link}`;
 
-                    // Price "1 200 Kč"
+                    // Price extraction from <auk-item-card-price>
                     let price = 0;
-                    const priceText = priceEl.text().trim().replace(/\s/g, '').replace(/Kč/i, '').replace(/,/g, '.'); // Handle "1,200" potentially? or "1 200"
-                    const parsedPrice = parseInt(priceText.replace(/\./g, '').replace(/\s/g, ''));
+                    const priceText = priceEl.text().trim();
+                    const parsedPrice = parseInt(priceText.replace(/\s/g, '').replace(/Kč/i, '').replace(/,/g, '.').replace(/\./g, ''));
                     if (!isNaN(parsedPrice)) {
                         price = parsedPrice;
                     }
 
                     if (maxPrice && price > maxPrice) return;
 
-                    const imageUrl = imgEl.attr('src');
+                    let imageUrl = imgEl.attr('data-src') || imgEl.attr('src');
+                    if (imageUrl && !imageUrl.startsWith('http')) {
+                        imageUrl = (imageUrl.startsWith('//') ? 'https:' : 'https://') + imageUrl;
+                    }
 
                     results.push({
                         title,
                         price,
-                        source: 'Aukro.cz (Experimental)',
+                        source: 'Aukro.cz',
                         region: 'CZ',
                         link: fullLink,
                         description: 'Aukro listing',

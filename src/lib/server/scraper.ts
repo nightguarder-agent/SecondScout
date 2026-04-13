@@ -3,7 +3,7 @@ import { SbazarScraper } from './scraper/impl/SbazarScraper';
 import { CyklobazarScraper } from './scraper/impl/CyklobazarScraper';
 import { AukroScraper } from './scraper/impl/AukroScraper';
 import { AntiScamService } from './scraper/anti_scam/AntiScamService';
-import { pb } from './pocketbase';
+import { pb } from '$lib/server/pocketbase';
 
 export interface SearchResult {
     title: string;
@@ -73,6 +73,7 @@ export async function searchMarket(
     category?: string,
     sources?: string[] // Optional specific sources
 ): Promise<SearchResult[]> {
+    keywords = keywords.trim();
     if (region === 'CZ') {
         const scrapers: Scraper[] = [];
         const results: SearchResult[] = [];
@@ -105,23 +106,30 @@ export async function searchMarket(
         const scraperResults = await Promise.all(promises);
         scraperResults.forEach(r => results.push(...r));
 
+        // Deduplicate results by link
+        const uniqueResults = Array.from(
+            new Map(results.map(item => [item.link, item])).values()
+        );
+
         // Check for scams
         try {
             const antiScam = new AntiScamService(pb);
+            const urls = uniqueResults.map(r => r.link);
+            const scamUrls = await antiScam.getScamUrls(urls);
 
-            // Parallel scam check
-            await Promise.all(results.map(async (item) => {
-                // Check if the item URL is a known scam URL
-                if (await antiScam.isScamUrl(item.link)) {
-                    item.isScam = true;
-                }
-            }));
+            if (scamUrls.size > 0) {
+                uniqueResults.forEach(item => {
+                    if (scamUrls.has(item.link)) {
+                        item.isScam = true;
+                    }
+                });
+            }
         } catch (e) {
             console.error('Anti-Scam check failed:', e);
             // Don't fail the whole search if anti-scam fails
         }
 
-        return results.sort((a, b) => a.price - b.price); // Sort by price? Or relevance? user didn't specify.
+        return uniqueResults.sort((a, b) => a.price - b.price);
 
     } else {
         // Germany - still mock for now

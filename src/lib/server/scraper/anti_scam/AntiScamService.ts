@@ -1,5 +1,6 @@
 import type PocketBase from 'pocketbase';
 import { PodvodyNaBazaruScraper } from './PodvodyNaBazaruScraper';
+import { ensureAdmin } from '$lib/server/pocketbase';
 
 export class AntiScamService {
     private scraper: PodvodyNaBazaruScraper;
@@ -118,6 +119,7 @@ export class AntiScamService {
     async isScammer(identifier: string): Promise<boolean> {
         if (!identifier) return false;
         try {
+            await ensureAdmin();
             // Search in 'scammers' collection directly
             // We search for exact value match
             const record = await this.pb.collection('scammers').getFirstListItem(`value="${identifier}"`);
@@ -130,10 +132,45 @@ export class AntiScamService {
     async isScamUrl(url: string): Promise<boolean> {
         if (!url) return false;
         try {
+            await ensureAdmin();
             const record = await this.pb.collection('scammers').getFirstListItem(`value="${url}" && type="url"`);
             return !!record;
         } catch {
             return false;
+        }
+    }
+
+    async getScamUrls(urls: string[]): Promise<Set<string>> {
+        if (!urls || urls.length === 0) return new Set();
+        try {
+            await ensureAdmin();
+            // Reduce batch size to avoid long URL/filter issues in some environments
+            const BATCH_SIZE = 20;
+            const chunks = [];
+            for (let i = 0; i < urls.length; i += BATCH_SIZE) {
+                chunks.push(urls.slice(i, i + BATCH_SIZE));
+            }
+
+            const scamUrls = new Set<string>();
+            for (const chunk of chunks) {
+                try {
+                    const filter = chunk.map(url => `value="${url}"`).join(' || ');
+                    const fullFilter = `(${filter}) && type="url"`;
+                    const records = await this.pb.collection('scammers').getFullList({
+                        filter: fullFilter,
+                        fields: 'value',
+                        requestKey: null // Disable auto-cancel for this batch
+                    });
+                    records.forEach(r => scamUrls.add(r.value));
+                } catch (innerError) {
+                    console.error('[AntiScam] Batch chunk failed:', innerError);
+                    // Continue with next chunk
+                }
+            }
+            return scamUrls;
+        } catch (e) {
+            console.error('[AntiScam] Batch check failed:', e);
+            return new Set();
         }
     }
 }

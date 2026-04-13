@@ -6,6 +6,7 @@
         region: "DE" | "CZ";
         description: string;
         imageUrl?: string;
+        link: string;
     }
 
     let region = $state("DE");
@@ -88,6 +89,28 @@
         } catch (e) {
             alert("Failed to add watcher");
         }
+    }
+
+    function openPreview(item: SearchResult) {
+        // Since modern browsers/sites block iframes (X-Frame-Options: DENY), 
+        // we use a centered popup window for the "stay-on-app" feeling.
+        const width = 1100;
+        const height = 900;
+        const left = (window.screen.width / 2) - (width / 2);
+        const top = (window.screen.height / 2) - (height / 2);
+        
+        window.open(
+            item.link, 
+            'DealHunterPreview', 
+            `width=${width},height=${height},top=${top},left=${left},menubar=no,toolbar=no,location=no,status=no`
+        );
+    }
+
+    function proxyImage(url: string | undefined): string {
+        if (!url) return '';
+        if (!url.startsWith('http')) return url;
+        // Use local server-side proxy to bypass hotlink protection (401 errors)
+        return `/api/img?url=${encodeURIComponent(url)}`;
     }
 </script>
 
@@ -203,14 +226,14 @@
                 >
                     {#each results as item}
                         <div
-                            class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group"
+                            class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group flex flex-col"
                         >
                             <div
                                 class="h-48 bg-gray-100 relative overflow-hidden"
                             >
                                 {#if item.imageUrl}
                                     <img
-                                        src={item.imageUrl}
+                                        src={proxyImage(item.imageUrl)}
                                         alt={item.title}
                                         class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                                     />
@@ -221,7 +244,7 @@
                                     {item.source}
                                 </div>
                             </div>
-                            <div class="p-5">
+                            <div class="p-5 flex-1 flex flex-col">
                                 <div
                                     class="flex justify-between items-start mb-2"
                                 >
@@ -242,11 +265,21 @@
                                 >
                                     {item.description}
                                 </p>
-                                <button
-                                    class="w-full py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium rounded-lg transition-colors text-sm"
-                                >
-                                    View Listing
-                                </button>
+                                <div class="mt-auto flex gap-2">
+                                    <button
+                                        onclick={() => openPreview(item)}
+                                        class="flex-1 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium rounded-lg transition-colors text-sm"
+                                    >
+                                        Preview
+                                    </button>
+                                    <a
+                                        href={item.link}
+                                        target="_blank"
+                                        class="flex-1 py-2 bg-gray-50 hover:bg-gray-100 text-gray-700 font-medium rounded-lg transition-colors text-sm text-center flex items-center justify-center"
+                                    >
+                                        View Original
+                                    </a>
+                                </div>
                             </div>
                         </div>
                     {/each}

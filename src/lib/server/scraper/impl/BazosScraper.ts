@@ -15,18 +15,14 @@ export class BazosScraper {
         const clean = (s: string) => s.toLowerCase().replace(/[^\w\sěščřžýáíéúůďťň]/g, ' ').trim();
 
         const qTokens = clean(query).split(/\s+/).filter(t => t.length > 0);
-        const titleTokens = clean(title).split(/\s+/);
+        const titleCleaned = clean(title);
 
-        // For short queries (< 4 words), we enforce strict "AND" logic on the Title.
-        // User searching "iPhone 15" expects an iPhone AND 15, not just 15 (Macbook).
+        // For short queries (< 4 words), we enforce that all query tokens exist somewhere in the title
         if (qTokens.length > 0 && qTokens.length < 4) {
-            const allFound = qTokens.every(qt => titleTokens.includes(qt));
+            // Relaxed: Check if title contains each query token as a substring
+            // This handles "iphone13" matching "iphone 13" and vice-versa
+            const allFound = qTokens.every(qt => titleCleaned.includes(qt));
             if (!allFound) {
-                // Try a softer check: substring match for tokens that might be joined?
-                // e.g. "iphone15" match "iphone 15".
-                // But titleTokens.includes(qt) covers exact token match.
-                // Let's debug log:
-                // console.log(`[Precision] Rejected "${title}" for "${query}" (Missing tokens)`);
                 return false;
             }
         }
@@ -46,7 +42,19 @@ export class BazosScraper {
                     await new Promise(resolve => setTimeout(resolve, backoffDelay));
                 }
 
-                return await this.performSearch(query, maxPrice, category);
+                // Fetch 2 pages in parallel (40 items total)
+                const page1 = this.performSearch(query, maxPrice, category, 0);
+                const page2 = this.performSearch(query, maxPrice, category, 20);
+
+                const results = await Promise.all([page1, page2]);
+                const allResults = results.flat();
+                
+                // Deduplicate by link (handles "Top" ads appearing on multiple pages)
+                const uniqueResults = Array.from(
+                    new Map(allResults.map(item => [item.link, item])).values()
+                );
+                
+                return uniqueResults;
             } catch (error) {
                 lastError = error as Error;
 
@@ -72,7 +80,7 @@ export class BazosScraper {
         return [];
     }
 
-    private async performSearch(query: string, maxPrice?: number, category?: BazosCategory): Promise<SearchResult[]> {
+    private async performSearch(query: string, maxPrice?: number, category?: BazosCategory, offset: number = 0): Promise<SearchResult[]> {
         // Random delay to behave more like a human (1-3s)
         const delay = Math.floor(Math.random() * 2000) + 1000;
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -96,6 +104,7 @@ export class BazosScraper {
                 cenado: maxPrice ? maxPrice.toString() : '',
                 Submit: 'Hledat',
                 kitx: 'ano',
+                stranka: offset > 0 ? offset : undefined, // Bazos uses stranka as item offset
             };
         }
 
