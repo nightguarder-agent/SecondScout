@@ -1,4 +1,4 @@
-# 🎯 DealHunter
+# 🎯 SecondScout
 
 A high-performance second-hand market aggregator (Bazos & more) built for power users.
 

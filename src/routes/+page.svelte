@@ -95,7 +95,7 @@
         
         window.open(
             item.link, 
-            'DealHunterPreview', 
+            'SecondScoutPreview', 
             `width=${width},height=${height},top=${top},left=${left},menubar=no,toolbar=no,location=no,status=no`
         );
     }
@@ -116,7 +116,7 @@
         >
             <div>
                 <h1 class="text-3xl font-bold tracking-tight text-gray-900">
-                    DealHunter
+                    SecondScout
                 </h1>
                 <p class="text-gray-500">Cross-border market aggregator</p>
             </div>

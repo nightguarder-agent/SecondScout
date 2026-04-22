@@ -50,7 +50,7 @@ export const GET: RequestHandler = async ({ url }) => {
                 'Content-Type': contentType,
                 'Cache-Control': 'public, max-age=86400', 
                 'Access-Control-Allow-Origin': '*',
-                'X-Proxy-By': 'DealHunter'
+                'X-Proxy-By': 'SecondScout'
             },
         });
     } catch (e: any) {
