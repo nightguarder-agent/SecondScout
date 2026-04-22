@@ -1,14 +1,74 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import iconv from 'iconv-lite';
-import type { SearchResult } from '../../scraper';
+import type { SearchResult, Scraper, SearchOptions } from '../../scraper';
 
 export type BazosCategory = 'sport' | 'elektro' | 'auto' | 'reality' | 'pc' | 'mobil' | 'knihy' | 'deti' | 'zvierata' | 'nabytek';
 
-export class BazosScraper {
+export class BazosScraper implements Scraper {
     private readonly baseUrl = 'https://www.bazos.cz';
     private readonly maxRetries = 3;
     private readonly timeout = 10000; // 10 seconds
+
+    private readonly negativeKeywords = [
+        'kryt', 'obal', 'pouzdro', 'case', 'sklo', 'folie', 'fólie', 'glass',
+        'krabice', 'box', 'nefunkční', 'na díly', 'broken', 'výměna', 'vyměním',
+        'koupím', 'poptávka', 'servis', 'oprava'
+    ];
+
+    private isModelMismatch(title: string, query: string): boolean {
+        const lowerTitle = title.toLowerCase();
+        const lowerQuery = query.toLowerCase();
+
+        const modifiers = ['max', 'plus', 'ultra', 'mini', 'pro'];
+        
+        for (const mod of modifiers) {
+            const inQuery = lowerQuery.includes(mod);
+            const inTitle = lowerTitle.includes(mod);
+            
+            if (inTitle && !inQuery) {
+                if (mod === 'max' && lowerQuery.includes('pro') && !lowerQuery.includes('max')) return true;
+                if (mod === 'plus' && !lowerQuery.includes('plus')) return true;
+                if (mod === 'ultra' && !lowerQuery.includes('ultra')) return true;
+                if (mod === 'mini' && !lowerQuery.includes('mini')) return true;
+            }
+            if (inQuery && !inTitle) return true;
+        }
+        return false;
+    }
+
+    private isNoise(title: string, price: number, query: string): boolean {
+        const lowerTitle = title.toLowerCase();
+        const lowerQuery = query.toLowerCase();
+
+        if (this.isModelMismatch(title, query)) return true;
+
+        const qTokens = lowerQuery.split(/\s+/).filter(t => t.length > 0);
+        const versionTokens = qTokens.filter(t => /\d+/.test(t) || (t.length > 1 && /[m]\d+/i.test(t)));
+        if (versionTokens.length > 0) {
+            for (const vt of versionTokens) {
+                if (!lowerTitle.includes(vt)) return true;
+                const titleTokens = lowerTitle.split(/\s+/).filter(t => t.length > 0);
+                const titleVersions = titleTokens.filter(t => 
+                    (t !== vt) && (/\d+/.test(t) || (t.length > 1 && /[m]\d+/i.test(t)))
+                );
+                if (titleVersions.length > 0 && !lowerQuery.includes(titleVersions[0])) {
+                    const isStorage = (t: string) => /gb|tb/i.test(t) || /^\d{2,4}$/.test(t);
+                    if (!isStorage(titleVersions[0])) return true;
+                }
+            }
+        }
+
+        const hasNegative = this.negativeKeywords.some(word => 
+            lowerTitle.includes(word) && !lowerQuery.includes(word)
+        );
+        if (hasNegative) return true;
+
+        const globalNoise = ['výměna', 'vyměním', 'koupím', 'poptávka', 'hledám', 'sháním'];
+        if (globalNoise.some(gn => lowerTitle.includes(gn) && !lowerQuery.includes(gn))) return true;
+
+        return false;
+    }
 
     private verifyStrictMatch(title: string, query: string): boolean {
         // Clean strings: lowercase, remove specialized chars (keep alphanumeric + utf8 chars)
@@ -29,7 +89,9 @@ export class BazosScraper {
         return true;
     }
 
-    async search(query: string, maxPrice?: number, category?: BazosCategory): Promise<SearchResult[]> {
+    async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+        const maxPrice = options?.maxPrice;
+        const category = options?.category as BazosCategory;
         let lastError: Error | null = null;
 
         // Retry with exponential backoff
@@ -43,8 +105,8 @@ export class BazosScraper {
                 }
 
                 // Fetch 2 pages in parallel (40 items total)
-                const page1 = this.performSearch(query, maxPrice, category, 0);
-                const page2 = this.performSearch(query, maxPrice, category, 20);
+                const page1 = this.performSearch(query, options, 0);
+                const page2 = this.performSearch(query, options, 20);
 
                 const results = await Promise.all([page1, page2]);
                 const allResults = results.flat();
@@ -80,7 +142,9 @@ export class BazosScraper {
         return [];
     }
 
-    private async performSearch(query: string, maxPrice?: number, category?: BazosCategory, offset: number = 0): Promise<SearchResult[]> {
+    private async performSearch(query: string, options?: SearchOptions, offset: number = 0): Promise<SearchResult[]> {
+        const maxPrice = options?.maxPrice;
+        const category = options?.category as BazosCategory;
         // Random delay to behave more like a human (1-3s)
         const delay = Math.floor(Math.random() * 2000) + 1000;
         await new Promise(resolve => setTimeout(resolve, delay));
@@ -171,6 +235,9 @@ export class BazosScraper {
 
                 // Precision Check: Title must contain all query tokens for short queries
                 if (!this.verifyStrictMatch(title, query)) return;
+
+                // Noise Filtering
+                if (options?.cleanSearch && this.isNoise(title, price, query)) return;
 
                 results.push({
                     title,

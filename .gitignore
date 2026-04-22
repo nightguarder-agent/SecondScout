@@ -6,7 +6,7 @@ node_modules
 .netlify
 .wrangler
 /.svelte-kit
-/build
+/dist
 
 # OS
 .DS_Store
@@ -34,3 +34,15 @@ src/tests*
 # Database
 pb_data/
 .agent
+
+# Build artifacts
+dist/
+.svelte-kit/
+.netlify/
+
+# Debug/Audit files
+search_audit.md
+*.log
+
+# Backend cache
+backend/node_modules/

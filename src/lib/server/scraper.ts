@@ -16,8 +16,15 @@ export interface SearchResult {
     isScam?: boolean;
 }
 
+export interface SearchOptions {
+    maxPrice?: number;
+    category?: string;
+    sources?: string[];
+    cleanSearch?: boolean;
+}
+
 export interface Scraper {
-    search(query: string, maxPrice?: number, category?: string): Promise<SearchResult[]>;
+    search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
 }
 
 const MOCK_IMAGES = [
@@ -98,7 +105,8 @@ export async function searchMarket(
         }
 
         // Run in parallel
-        const promises = scrapers.map(s => s.search(keywords, maxPrice, category).catch(e => {
+        const options: SearchOptions = { maxPrice, category, sources, cleanSearch: true };
+        const promises = scrapers.map(s => s.search(keywords, options).catch(e => {
             console.error(`Scraper failed:`, e);
             return [];
         }));

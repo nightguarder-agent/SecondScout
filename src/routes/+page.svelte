@@ -9,13 +9,14 @@
         link: string;
     }
 
-    let region = $state("DE");
-    let query = $state("");
-    let maxPrice = $state("");
-    let results: SearchResult[] = $state([]);
-    let loading = $state(false);
-    let searching = $state(false);
-    let excludedWarning = $state<string | null>(null);
+     let region = $state("DE");
+     let query = $state("");
+     let maxPrice = $state("");
+     let results: SearchResult[] = $state([]);
+     let loading = $state(false);
+     let searching = $state(false);
+     let excludedWarning = $state<string | null>(null);
+     let selectedSources = $state<string[]>([]);
 
     const ELECTRONICS_KEYWORDS = [
         "iphone",
@@ -51,15 +52,8 @@
         try {
             const params = new URLSearchParams({ region, q: query });
             if (maxPrice) params.append("maxPrice", maxPrice);
-
-            // Smart Market Router: Exclude Cyklobazar for electronics
-            const qLower = query.toLowerCase();
-            if (ELECTRONICS_KEYWORDS.some((k) => qLower.includes(k))) {
-                // If electronics, explicitly list unwanted exclusions or just include allowed.
-                // Simpler: Send list of allowed sources.
-                // Allowed: Bazos, Sbazar, Aukro
-                params.append("sources", "Bazos,Sbazar,Aukro");
-                excludedWarning = "Cyklobazar excluded for electronics query.";
+            if (selectedSources.length > 0) {
+                params.append("sources", selectedSources.join(','));
             }
 
             const res = await fetch(`/api/search?${params}`);
@@ -187,22 +181,77 @@
                 </div>
             </div>
 
-            <!-- Actions -->
-            <div class="flex gap-3">
-                <button
-                    onclick={search}
-                    disabled={loading}
-                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    {loading ? "Searching..." : "Search Market"}
-                </button>
-                <button
-                    onclick={addWatcher}
-                    class="px-6 py-3 bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-800 transition-all shadow-lg shadow-gray-200"
-                >
-                    Add Watcher
-                </button>
-            </div>
+             <!-- Provider Filter -->
+             <div class="flex items-center gap-4 mb-4">
+                 <span class="text-xs font-semibold uppercase text-gray-500">Providers:</span>
+                 <div class="flex items-center gap-2">
+                     <label class="flex items-center gap-1 text-sm">
+                         <input
+                             type="checkbox"
+                             onchange={(e) => {
+                                 const target = e.target as HTMLInputElement;
+                                 if (target.checked) selectedSources = [...selectedSources, 'Bazos'];
+                                 else selectedSources = selectedSources.filter(s => s !== 'Bazos');
+                             }}
+                             class="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                         />
+                         Bazos
+                     </label>
+                     <label class="flex items-center gap-1 text-sm">
+                         <input
+                             type="checkbox"
+                             onchange={(e) => {
+                                 const target = e.target as HTMLInputElement;
+                                 if (target.checked) selectedSources = [...selectedSources, 'Sbazar'];
+                                 else selectedSources = selectedSources.filter(s => s !== 'Sbazar');
+                             }}
+                             class="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                         />
+                         Sbazar
+                     </label>
+                     <label class="flex items-center gap-1 text-sm">
+                         <input
+                             type="checkbox"
+                             onchange={(e) => {
+                                 const target = e.target as HTMLInputElement;
+                                 if (target.checked) selectedSources = [...selectedSources, 'Aukro'];
+                                 else selectedSources = selectedSources.filter(s => s !== 'Aukro');
+                             }}
+                             class="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                         />
+                         Aukro
+                     </label>
+                     <label class="flex items-center gap-1 text-sm">
+                         <input
+                             type="checkbox"
+                             onchange={(e) => {
+                                 const target = e.target as HTMLInputElement;
+                                 if (target.checked) selectedSources = [...selectedSources, 'Cyklobazar'];
+                                 else selectedSources = selectedSources.filter(s => s !== 'Cyklobazar');
+                             }}
+                             class="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                         />
+                         Cyklobazar
+                     </label>
+                 </div>
+             </div>
+             
+             <!-- Actions -->
+             <div class="flex gap-3">
+                 <button
+                     onclick={search}
+                     disabled={loading}
+                     class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-xl transition-all shadow-lg shadow-blue-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                     {loading ? "Searching..." : "Search Market"}
+                 </button>
+                 <button
+                     onclick={addWatcher}
+                     class="px-6 py-3 bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-800 transition-all shadow-lg shadow-gray-200"
+                 >
+                     Add Watcher
+                 </button>
+             </div>
         </div>
 
         <!-- Results -->

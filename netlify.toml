@@ -1,0 +1,16 @@
+[build]
+  command = "npm run build:netlify"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/api/cron/:path*"
+  to = "/.netlify/functions/cron/:path*"
+  status = 200
+
+[build.env]
+  NODE_ENV = "production"

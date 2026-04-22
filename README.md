@@ -44,6 +44,23 @@ A high-performance second-hand market aggregator (Bazos & more) built for power 
 -   **Note**: The default image `ghcr.io/muchobien/pocketbase` uses `/pb_data`, distinct from the standard `/usr/local/bin/pb_data`.
 - ghcr.io/muchobien/pocketbase:latest	
 
+### Netlify Deployment
+1. Create a Netlify account and add your site
+2. Connect your GitHub repository
+3. In Build settings:
+   - Build command: `npm run build:netlify`
+   - Publish directory: `dist`
+4. Set environment variables in Netlify dashboard:
+   - `PB_ADMIN_EMAIL`
+   - `PB_ADMIN_PASSWORD`
+   - `PUBLIC_POCKETBASE_URL`
+   - `CRON_SECRET`
+   - `NETLIFY_BUILD_TIMEOUT` (optional)
+   - `NETLIFY_BUILD_MAXRETRY` (optional)
+5. Deploy site
+
+### Cron Jobs on Netlify
+Netlify Functions are available at `/.netlify/functions/*`. The cron function is available at `/.netlify/functions/cron` and requires the `CRON_SECRET` environment variable.
 
 ### Authentication
 -   The SvelteKit backend authenticates as an **Admin** using environment variables (`PB_ADMIN_EMAIL`, `PB_ADMIN_PASSWORD`) defined in `docker-compose.yml`.
@@ -72,7 +89,45 @@ Host for free on [Pockethost.io](https://pockethost.io/).
 ### 2. Frontend (SvelteKit)
 Deploy to **Vercel** or **Netlify** (Free Tiers).
 - **Vercel**: Automatically uses `vercel.json` for daily Cron Jobs.
-- **Netlify**: Use an external pinger (like `cron-job.org`) to hit `/api/cron?cron_secret=...` daily.
+- **Netlify**: 
+  - Deploy using `netlify.toml` configuration
+  - Use Netlify Functions for API endpoints
+  - Set environment variables in Netlify UI (not in .env files)
+  - **Cron Jobs**: Use an external pinger (like `cron-job.org` or `uptimerobot.com`) to hit `/api/cron?cron_secret=YOUR_SECRET` daily
+
+### Netlify-specific setup:
+1. Environment variables (set in Netlify UI > Site settings > Build & deploy > Environment):
+   - `PB_ADMIN_EMAIL`
+   - `PB_ADMIN_PASSWORD`
+   - `PUBLIC_POCKETBASE_URL`
+   - `CRON_SECRET`
+   
+2. Build settings:
+   - Build command: `npm run build:netlify`
+   - Publish directory: `svelte-kit/adapter-netlify`
+
+3. Cron Jobs Setup:
+   - Netlify doesn't support traditional cron jobs. Use an external pinger service:
+     - [cron-job.org](https://cron-job.org/) (free tier available)
+     - [UptimeRobot](https://uptimerobot.com/) (free tier available)
+     - [EasyCron](https://easycron.com/) (free tier available)
+   
+   - Configure the pinger to hit: `https://your-site.netlify.dev/.netlify/functions/api-cron?cron_secret=YOUR_CRON_SECRET`
+   
+   - The Netlify Function in `functions/api-cron.js` handles the cron execution securely by verifying the CRON_SECRET
+
+4. Functions Setup:
+   - Netlify Functions are in the `functions/` directory
+   - Install function dependencies with: `npm run build:netlify` (this copies dependencies)
+   - Functions are automatically detected and deployed with your site
+
+5. Alternative backend deployment:
+   - If you need a backend server, consider separate hosting:
+     - AWS EC2
+     - DigitalOcean Droplet
+     - Railway
+     - Fly.io
+   - Or use PocketBase Cloud for a managed solution
 
 ## 🛠️ Built With
 - **Svelte 5** (Runes)
