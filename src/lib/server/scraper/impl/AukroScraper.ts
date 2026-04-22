@@ -5,6 +5,21 @@ import type { SearchResult } from '../../scraper';
 export class AukroScraper {
     private readonly baseUrl = 'https://aukro.cz';
 
+    private verifyStrictMatch(title: string, query: string): boolean {
+        const clean = (s: string) => s.toLowerCase().replace(/[^\w\sěščřžýáíéúůďťň]/g, ' ').trim();
+        
+        const qTokens = clean(query).split(/\s+/).filter(t => t.length > 0);
+        const titleCleaned = clean(title);
+        
+        if (qTokens.length > 0 && qTokens.length < 4) {
+            const allFound = qTokens.every(qt => titleCleaned.includes(qt));
+            if (!allFound) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     async search(query: string, maxPrice?: number): Promise<SearchResult[]> {
         try {
             // Aukro results: https://aukro.cz/vysledky-vyhledavani?text={query}
@@ -61,6 +76,9 @@ export class AukroScraper {
                     }
 
                     if (maxPrice && price > maxPrice) return;
+
+                    // Strict relevance check - title must contain all query tokens
+                    if (!this.verifyStrictMatch(title, query)) return;
 
                     let imageUrl = imgEl.attr('data-src') || imgEl.attr('src');
                     if (imageUrl && !imageUrl.startsWith('http')) {
