@@ -13,7 +13,7 @@ export const POST: RequestHandler = async ({ request }) => {
         console.log(`[Watcher Create] Attempting to create watcher for: ${keywords} (${region})`);
 
         const record = await pb.collection('watchers').create({
-            keywords,
+            keyword: keywords,
             region,
             max_price,
             // user: "mvp_user" // Removed: Invalid relation ID causing 500 error

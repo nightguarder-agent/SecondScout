@@ -5,7 +5,7 @@ import { ensureAdmin } from '$lib/server/pocketbase';
 export class AntiScamService {
     private scraper: PodvodyNaBazaruScraper;
     private pb: PocketBase;
-    private readonly COLLECTION = 'podvody';
+    private readonly COLLECTION = 'scam_reports';
 
     constructor(pb: PocketBase) {
         this.scraper = new PodvodyNaBazaruScraper();
@@ -33,7 +33,7 @@ export class AntiScamService {
                 // 1. Upsert 'podvody' record
                 // Use detailsURL as unique key since scamId is not a built-in field and user says "id" is default
                 // Assuming 'detailURL' is unique.
-                const existing = await this.pb.collection('podvody').getFirstListItem(`detailURL="${scammer.detailsURL}"`);
+                const existing = await this.pb.collection('scam_reports').getFirstListItem(`detailURL="${scammer.detailsURL}"`);
 
                 // Update
                 const updateData = {
@@ -52,7 +52,7 @@ export class AntiScamService {
                     urls: scammer.urls
                 };
 
-                await this.pb.collection('podvody').update(existing.id, updateData);
+                await this.pb.collection('scam_reports').update(existing.id, updateData);
                 podvodId = existing.id;
                 updatedReports++;
             } catch (e: any) {
@@ -69,7 +69,7 @@ export class AntiScamService {
                         // bankAccounts: scammer.bankAccounts, // Removed
                         urls: scammer.urls
                     };
-                    const record = await this.pb.collection('podvody').create(createData);
+                    const record = await this.pb.collection('scam_reports').create(createData);
                     podvodId = record.id;
                     newReports++;
                 } else {
@@ -89,14 +89,14 @@ export class AntiScamService {
                 try {
                     // Check if this specific value-podvody pair exists
                     // This assumes we want to capture that THIS scam report involves THIS number.
-                    await this.pb.collection('scammers').getFirstListItem(`value="${value}" && podvody="${podvodId}"`);
+                    await this.pb.collection('scammers').getFirstListItem(`value="${value}" && scam_reports="${podvodId}"`);
                 } catch (err: any) {
                     if (err.status === 404) {
                         // Create
                         await this.pb.collection('scammers').create({
                             value,
                             type,
-                            podvody: podvodId
+                            scams: podvodId
                         });
                         identifiersCreated++;
                     }
