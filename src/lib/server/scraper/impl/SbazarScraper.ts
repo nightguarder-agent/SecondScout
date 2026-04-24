@@ -11,6 +11,28 @@ export class SbazarScraper implements Scraper {
         'koupím', 'poptávka', 'servis', 'oprava'
     ];
 
+    private tokenize(text: string): string[] {
+        const lower = text.toLowerCase().trim();
+        return lower
+            .replace(/[-_]/g, ' ')
+            .split(/\s+/)
+            .filter(token => token.length > 0)
+            .map(token => {
+                if (/^m\d+$/.test(token)) return token.toLowerCase();
+                if (/^\d{2,4}$/.test(token)) return token;
+                if (/^\d+$/.test(token.replace(/[^0-9]/g, ''))) return token.replace(/[^0-9]/g, '');
+                return token;
+            });
+    }
+
+    private hasAllTokens(titleTokens: string[], queryTokens: string[]): boolean {
+        return queryTokens.every(qToken => 
+            titleTokens.some(tToken => 
+                tToken.includes(qToken) || qToken.includes(tToken)
+            )
+        );
+    }
+
     private isModelMismatch(title: string, query: string): boolean {
         const lowerTitle = title.toLowerCase();
         const lowerQuery = query.toLowerCase();
@@ -42,48 +64,35 @@ export class SbazarScraper implements Scraper {
         const lowerTitle = title.toLowerCase();
         const lowerQuery = query.toLowerCase();
 
-        // 0. Model mismatch check (Strict Model Matching)
         if (this.isModelMismatch(title, query)) return true;
 
-        // 1. Mandatory Tokens: If query has numbers (e.g., "15", "M2"), title MUST contain them.
-        const qTokens = lowerQuery.split(/\s+/).filter(t => t.length > 0);
-        const versionTokens = qTokens.filter(t => /\d+/.test(t) || (t.length > 1 && /[m]\d+/i.test(t)));
+        const qTokens = this.tokenize(lowerQuery);
+        const titleTokens = this.tokenize(lowerTitle);
+        
+        const versionTokens = qTokens.filter(t => /\d+/.test(t) || (t.length > 1 && /[m]\d+/.test(t)));
         
         if (versionTokens.length > 0) {
             for (const vt of versionTokens) {
-                if (!lowerTitle.includes(vt)) return true;
+                if (!titleTokens.some(tToken => tToken.includes(vt))) return true;
                 
-                // If query is "iPhone 15", but title has "iPhone 13" or "iPhone 14"
-                // We check if the title has a DIFFERENT number that looks like a version.
-                const titleTokens = lowerTitle.split(/\s+/).filter(t => t.length > 0);
-                const titleVersions = titleTokens.filter(t => 
-                    (t !== vt) && (/\d+/.test(t) || (t.length > 1 && /[m]\d+/i.test(t)))
+                const otherVersions = titleTokens.filter(t => 
+                    (t !== vt) && (/\d+/.test(t) || (t.length > 1 && /[m]\d+/.test(t)))
                 );
                 
-                // If title has a different version number, it's likely a mismatch
-                if (titleVersions.length > 0 && !lowerQuery.includes(titleVersions[0])) {
-                    // But allow if title has multiple numbers (e.g. "iPhone 15 128GB")
+                if (otherVersions.length > 0 && !qTokens.includes(otherVersions[0])) {
                     const isStorage = (t: string) => /gb|tb/i.test(t) || /^\d{2,4}$/.test(t);
-                    if (!isStorage(titleVersions[0])) return true;
+                    if (!isStorage(otherVersions[0])) return true;
                 }
             }
         }
 
-        // 2. Keyword check: If title contains negative keyword NOT in query
         const hasNegative = this.negativeKeywords.some(word => 
             lowerTitle.includes(word) && !lowerQuery.includes(word)
         );
+        if (hasNegative) return true;
 
-        if (hasNegative) {
-            // Strict enforcement: if it contains generic noise, it's out.
-            return true;
-        }
-
-        // 3. Trade/Wanted Ads (Global Noise)
         const globalNoise = ['výměna', 'vyměním', 'koupím', 'poptávka', 'hledám', 'sháním'];
-        if (globalNoise.some(gn => lowerTitle.includes(gn) && !lowerQuery.includes(gn))) {
-            return true;
-        }
+        if (globalNoise.some(gn => lowerTitle.includes(gn) && !lowerQuery.includes(gn))) return true;
 
         return false;
     }

@@ -5,17 +5,35 @@ import type { SearchResult } from '../../scraper';
 export class AukroScraper {
     private readonly baseUrl = 'https://aukro.cz';
 
+    private tokenize(text: string): string[] {
+        const lower = text.toLowerCase().trim();
+        return lower
+            .replace(/[-_]/g, ' ')
+            .split(/\s+/)
+            .filter(token => token.length > 0)
+            .map(token => {
+                if (/^m\d+$/.test(token)) return token.toLowerCase();
+                if (/^\d{2,4}$/.test(token)) return token;
+                if (/^\d+$/.test(token.replace(/[^0-9]/g, ''))) return token.replace(/[^0-9]/g, '');
+                return token;
+            });
+    }
+
+    private hasAllTokens(titleTokens: string[], queryTokens: string[]): boolean {
+        return queryTokens.every(qToken => 
+            titleTokens.some(tToken => 
+                tToken.includes(qToken) || qToken.includes(tToken)
+            )
+        );
+    }
+
     private verifyStrictMatch(title: string, query: string): boolean {
         const clean = (s: string) => s.toLowerCase().replace(/[^\w\sěščřžýáíéúůďťň]/g, ' ').trim();
-        
-        const qTokens = clean(query).split(/\s+/).filter(t => t.length > 0);
-        const titleCleaned = clean(title);
-        
+        const qTokens = this.tokenize(clean(query));
+        const titleTokens = this.tokenize(clean(title));
+
         if (qTokens.length > 0 && qTokens.length < 4) {
-            const allFound = qTokens.every(qt => titleCleaned.includes(qt));
-            if (!allFound) {
-                return false;
-            }
+            return this.hasAllTokens(titleTokens, qTokens);
         }
         return true;
     }

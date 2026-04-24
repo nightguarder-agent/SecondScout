@@ -70,21 +70,35 @@ export class BazosScraper implements Scraper {
         return false;
     }
 
+    private tokenize(text: string): string[] {
+        const lower = text.toLowerCase().trim();
+        return lower
+            .replace(/[-_]/g, ' ')
+            .split(/\s+/)
+            .filter(token => token.length > 0)
+            .map(token => {
+                if (/^m\d+$/.test(token)) return token.toLowerCase();
+                if (/^\d{2,4}$/.test(token)) return token;
+                if (/^\d+$/.test(token.replace(/[^0-9]/g, ''))) return token.replace(/[^0-9]/g, '');
+                return token;
+            });
+    }
+
+    private hasAllTokens(titleTokens: string[], queryTokens: string[]): boolean {
+        return queryTokens.every(qToken => 
+            titleTokens.some(tToken => 
+                tToken.includes(qToken) || qToken.includes(tToken)
+            )
+        );
+    }
+
     private verifyStrictMatch(title: string, query: string): boolean {
-        // Clean strings: lowercase, remove specialized chars (keep alphanumeric + utf8 chars)
         const clean = (s: string) => s.toLowerCase().replace(/[^\w\sěščřžýáíéúůďťň]/g, ' ').trim();
+        const qTokens = this.tokenize(clean(query));
+        const titleTokens = this.tokenize(clean(title));
 
-        const qTokens = clean(query).split(/\s+/).filter(t => t.length > 0);
-        const titleCleaned = clean(title);
-
-        // For short queries (< 4 words), we enforce that all query tokens exist somewhere in the title
         if (qTokens.length > 0 && qTokens.length < 4) {
-            // Relaxed: Check if title contains each query token as a substring
-            // This handles "iphone13" matching "iphone 13" and vice-versa
-            const allFound = qTokens.every(qt => titleCleaned.includes(qt));
-            if (!allFound) {
-                return false;
-            }
+            return this.hasAllTokens(titleTokens, qTokens);
         }
         return true;
     }
