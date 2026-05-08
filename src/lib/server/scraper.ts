@@ -139,7 +139,8 @@ export async function searchMarket(
         if (useAll || sources?.some(s => s.toLowerCase().includes('bazos'))) {
             scrapers.push(new BazosScraper());
         }
-        if (useAll || sources?.some(s => s.toLowerCase().includes('sbazar'))) {
+        // Skip Sbazar for electronics to avoid common accessory noise
+        if (detectedCategory !== 'elektro' && (useAll || sources?.some(s => s.toLowerCase().includes('sbazar')))) {
             scrapers.push(new SbazarScraper());
         }
         if (useAll || sources?.some(s => s.toLowerCase().includes('cyklobazar'))) {

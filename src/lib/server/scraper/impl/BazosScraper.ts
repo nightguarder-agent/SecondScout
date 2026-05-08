@@ -79,6 +79,13 @@ export class BazosScraper implements Scraper {
         const globalNoise = ['výměna', 'vyměním', 'koupím', 'poptávka', 'hledám', 'sháním'];
         if (globalNoise.some(gn => lowerTitle.includes(gn) && !lowerQuery.includes(gn))) return true;
 
+        // Broad accessory detection (covers inflection: sklo/skla/skli, pouzdro/pouzd, držák/drž, etc.)
+        const accessoryRegex = /\b(?:skl\w*|kryt|obal|pouzd(?:ro)?|case|drž\w*|drzh|krab|box)\b/i;
+        const userNegativeKeywords = options?.negativeKeywords || [];
+        const queryHasAccessory = userNegativeKeywords.some(nk => lowerQuery.includes(nk)) ||
+                                 this.negativeKeywords.some(nk => lowerQuery.includes(nk));
+        if (accessoryRegex.test(lowerTitle) && !queryHasAccessory) return true;
+
         return false;
     }
 

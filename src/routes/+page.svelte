@@ -161,6 +161,7 @@
                         bind:value={query}
                         placeholder="e.g. Shimano DI2"
                         class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                        on:keydown={(e) => { if (e.key === 'Enter') search(); }}
                     />
                 </div>
 
@@ -177,6 +178,7 @@
                         bind:value={maxPrice}
                         placeholder="500"
                         class="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                        on:keydown={(e) => { if (e.key === 'Enter') search(); }}
                     />
                 </div>
             </div>
