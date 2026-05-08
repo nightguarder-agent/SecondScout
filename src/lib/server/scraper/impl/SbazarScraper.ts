@@ -41,30 +41,26 @@ export class SbazarScraper implements Scraper {
         const modifiers = ['max', 'plus', 'ultra', 'mini', 'pro'];
         
         for (const mod of modifiers) {
-            const inQuery = lowerQuery.includes(mod);
-            const inTitle = lowerTitle.includes(mod);
-            
-            // If modifier is in title but NOT in query (e.g., query "Pro", title "Pro Max")
-            if (inTitle && !inQuery) {
-                // Special case for iPhone: "Pro Max" contains "Pro"
-                if (mod === 'max' && lowerQuery.includes('pro') && !lowerQuery.includes('max')) return true;
-                if (mod === 'plus' && !lowerQuery.includes('plus')) return true;
-                if (mod === 'ultra' && !lowerQuery.includes('ultra')) return true;
-                if (mod === 'mini' && !lowerQuery.includes('mini')) return true;
+            if (lowerQuery.includes(mod) !== lowerTitle.includes(mod)) {
+                return true;
             }
-            
-            // If modifier is in query but NOT in title (e.g., query "Pro", title just "iPhone 15")
-            if (inQuery && !inTitle) return true;
         }
 
         return false;
     }
 
-    private isNoise(title: string, price: number, query: string): boolean {
+    private isNoise(title: string, price: number, query: string, options?: SearchOptions): boolean {
         const lowerTitle = title.toLowerCase();
         const lowerQuery = query.toLowerCase();
 
         if (this.isModelMismatch(title, query)) return true;
+
+        // User-provided negative keywords
+        if (options?.negativeKeywords && options.negativeKeywords.length > 0) {
+            if (options.negativeKeywords.some(nk => lowerTitle.includes(nk))) {
+                return true;
+            }
+        }
 
         const qTokens = this.tokenize(lowerQuery);
         const titleTokens = this.tokenize(lowerTitle);
@@ -236,7 +232,7 @@ export class SbazarScraper implements Scraper {
                     }
                 }
 
-                if (options?.cleanSearch && this.isNoise(title, price, query)) {
+                if (options?.cleanSearch && this.isNoise(title, price, query, options)) {
                     continue;
                 }
 

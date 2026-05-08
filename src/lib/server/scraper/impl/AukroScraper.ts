@@ -1,8 +1,8 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import type { SearchResult } from '../../scraper';
+import type { SearchResult, Scraper, SearchOptions } from '../../scraper';
 
-export class AukroScraper {
+export class AukroScraper implements Scraper {
     private readonly baseUrl = 'https://aukro.cz';
 
     private tokenize(text: string): string[] {
@@ -27,8 +27,17 @@ export class AukroScraper {
         );
     }
 
-    private verifyStrictMatch(title: string, query: string): boolean {
+    private verifyStrictMatch(title: string, query: string, options?: SearchOptions): boolean {
         const clean = (s: string) => s.toLowerCase().replace(/[^\w\sěščřžýáíéúůďťň]/g, ' ').trim();
+        const lowerTitle = title.toLowerCase();
+
+        // User-provided negative keywords
+        if (options?.negativeKeywords && options.negativeKeywords.length > 0) {
+            if (options.negativeKeywords.some(nk => lowerTitle.includes(nk))) {
+                return false;
+            }
+        }
+
         const qTokens = this.tokenize(clean(query));
         const titleTokens = this.tokenize(clean(title));
 
@@ -38,7 +47,8 @@ export class AukroScraper {
         return true;
     }
 
-    async search(query: string, maxPrice?: number): Promise<SearchResult[]> {
+    async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+        const maxPrice = options?.maxPrice;
         try {
             // Aukro results: https://aukro.cz/vysledky-vyhledavani?text={query}
             // Price filter if possible, otherwise manual. 
@@ -96,7 +106,7 @@ export class AukroScraper {
                     if (maxPrice && price > maxPrice) return;
 
                     // Strict relevance check - title must contain all query tokens
-                    if (!this.verifyStrictMatch(title, query)) return;
+                    if (!this.verifyStrictMatch(title, query, options)) return;
 
                     let imageUrl = imgEl.attr('data-src') || imgEl.attr('src');
                     if (imageUrl && !imageUrl.startsWith('http')) {

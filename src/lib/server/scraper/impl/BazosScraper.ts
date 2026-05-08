@@ -26,22 +26,34 @@ export class BazosScraper implements Scraper {
             const inQuery = lowerQuery.includes(mod);
             const inTitle = lowerTitle.includes(mod);
             
-            if (inTitle && !inQuery) {
-                if (mod === 'max' && lowerQuery.includes('pro') && !lowerQuery.includes('max')) return true;
-                if (mod === 'plus' && !lowerQuery.includes('plus')) return true;
-                if (mod === 'ultra' && !lowerQuery.includes('ultra')) return true;
-                if (mod === 'mini' && !lowerQuery.includes('mini')) return true;
+            if (inQuery !== inTitle) {
+                // Special case: "pro" is often a substring of "pro max"
+                // If we search for "pro max", inQuery('pro') is true and inQuery('max') is true.
+                // If title is "pro max", inTitle('pro') is true and inTitle('max') is true.
+                // So inQuery === inTitle for both.
+                
+                // If we search for "pro" and title is "pro max":
+                // mod='pro': inQuery=true, inTitle=true (OK)
+                // mod='max': inQuery=false, inTitle=true (Mismatch!) -> returns true. Correct.
+                
+                return true;
             }
-            if (inQuery && !inTitle) return true;
         }
         return false;
     }
 
-    private isNoise(title: string, price: number, query: string): boolean {
+    private isNoise(title: string, price: number, query: string, options?: SearchOptions): boolean {
         const lowerTitle = title.toLowerCase();
         const lowerQuery = query.toLowerCase();
 
         if (this.isModelMismatch(title, query)) return true;
+
+        // User-provided negative keywords
+        if (options?.negativeKeywords && options.negativeKeywords.length > 0) {
+            if (options.negativeKeywords.some(nk => lowerTitle.includes(nk))) {
+                return true;
+            }
+        }
 
         const qTokens = lowerQuery.split(/\s+/).filter(t => t.length > 0);
         const versionTokens = qTokens.filter(t => /\d+/.test(t) || (t.length > 1 && /[m]\d+/i.test(t)));
@@ -251,7 +263,7 @@ export class BazosScraper implements Scraper {
                 if (!this.verifyStrictMatch(title, query)) return;
 
                 // Noise Filtering
-                if (options?.cleanSearch && this.isNoise(title, price, query)) return;
+                if (options?.cleanSearch && this.isNoise(title, price, query, options)) return;
 
                 results.push({
                     title,

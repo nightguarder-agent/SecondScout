@@ -2,6 +2,7 @@ import { BazosScraper } from './scraper/impl/BazosScraper';
 import { SbazarScraper } from './scraper/impl/SbazarScraper';
 import { CyklobazarScraper } from './scraper/impl/CyklobazarScraper';
 import { AukroScraper } from './scraper/impl/AukroScraper';
+import { KleinanzeigenScraper } from './scraper/impl/KleinanzeigenScraper';
 import { AntiScamService } from './scraper/anti_scam/AntiScamService';
 import { pb } from '$lib/server/pocketbase';
 
@@ -21,10 +22,55 @@ export interface SearchOptions {
     category?: string;
     sources?: string[];
     cleanSearch?: boolean;
+    negativeKeywords?: string[];
 }
 
 export interface Scraper {
     search(query: string, options?: SearchOptions): Promise<SearchResult[]>;
+}
+
+export function parseQuery(query: string): { cleanedQuery: string, negativeKeywords: string[] } {
+    const tokens = query.split(/\s+/);
+    const negativeKeywords: string[] = [];
+    const positiveTokens: string[] = [];
+
+    for (const token of tokens) {
+        if (token.startsWith('-') && token.length > 1) {
+            negativeKeywords.push(token.substring(1).toLowerCase());
+        } else {
+            positiveTokens.push(token);
+        }
+    }
+
+    return {
+        cleanedQuery: positiveTokens.join(' '),
+        negativeKeywords
+    };
+}
+
+const ELECTRONICS_KEYWORDS = [
+    "iphone", "ipad", "macbook", "samsung", "xiaomi", "huawei", "sony", "nintendo", 
+    "playstation", "xbox", "televize", "tv", "laptop", "notebook", "tablet", "mobil"
+];
+
+const SPORT_KEYWORDS = [
+    "shimano", "sram", "garmin", "specialized", "trek", "canyon", "cube", "giant", 
+    "scott", "bianchi", "pinarello", "colnago", "merida", "ktm", "focus", "ghost",
+    "rockshox", "fox", "campagnolo", "bicycle", "kolo", "bike"
+];
+
+export function detectCategory(query: string): string | undefined {
+    const lowerQuery = query.toLowerCase();
+    
+    if (ELECTRONICS_KEYWORDS.some(k => lowerQuery.includes(k))) {
+        return 'elektro'; // Common category name across Bazos/Sbazar
+    }
+    
+    if (SPORT_KEYWORDS.some(k => lowerQuery.includes(k))) {
+        return 'sport';
+    }
+    
+    return undefined;
 }
 
 const MOCK_IMAGES = [
@@ -80,16 +126,15 @@ export async function searchMarket(
     category?: string,
     sources?: string[] // Optional specific sources
 ): Promise<SearchResult[]> {
-    keywords = keywords.trim();
+    const { cleanedQuery, negativeKeywords } = parseQuery(keywords);
+    const detectedCategory = category || detectCategory(cleanedQuery);
+
     if (region === 'CZ') {
         const scrapers: Scraper[] = [];
         const results: SearchResult[] = [];
 
         // Determine which scrapers to use
         const useAll = !sources || sources.length === 0;
-
-        // Map source names to scraper instances
-        // "Bazos", "Sbazar", "Cyklobazar", "Aukro"
 
         if (useAll || sources?.some(s => s.toLowerCase().includes('bazos'))) {
             scrapers.push(new BazosScraper());
@@ -105,8 +150,15 @@ export async function searchMarket(
         }
 
         // Run in parallel
-        const options: SearchOptions = { maxPrice, category, sources, cleanSearch: true };
-        const promises = scrapers.map(s => s.search(keywords, options).catch(e => {
+        const options: SearchOptions = { 
+            maxPrice, 
+            category: detectedCategory, 
+            sources, 
+            cleanSearch: true,
+            negativeKeywords
+        };
+        
+        const promises = scrapers.map(s => s.search(cleanedQuery, options).catch(e => {
             console.error(`Scraper failed:`, e);
             return [];
         }));
@@ -140,8 +192,37 @@ export async function searchMarket(
         return uniqueResults.sort((a, b) => a.price - b.price);
 
     } else {
-        // Germany - still mock for now
-        const scraper = new MockScraper('DE');
-        return scraper.search(keywords, maxPrice, category);
+        // Germany - use Kleinanzeigen scraper
+        const scrapers: Scraper[] = [];
+        const useAll = !sources || sources.length === 0;
+
+        if (useAll || sources?.some(s => s.toLowerCase().includes('kleinanzeigen'))) {
+            scrapers.push(new KleinanzeigenScraper());
+        }
+
+        if (scrapers.length === 0) {
+            // Fallback to mock if no scrapers matched
+            const scraper = new MockScraper('DE');
+            return scraper.search(keywords, maxPrice, category);
+        }
+
+        const options: SearchOptions = { 
+            maxPrice, 
+            category: detectedCategory, 
+            sources, 
+            cleanSearch: true,
+            negativeKeywords
+        };
+
+        const results: SearchResult[] = [];
+        const promises = scrapers.map(s => s.search(cleanedQuery, options).catch(e => {
+            console.error(`Scraper failed:`, e);
+            return [];
+        }));
+
+        const scraperResults = await Promise.all(promises);
+        scraperResults.forEach(r => results.push(...r));
+
+        return results.sort((a, b) => a.price - b.price);
     }
 }

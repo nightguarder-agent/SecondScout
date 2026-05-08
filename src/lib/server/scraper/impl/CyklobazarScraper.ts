@@ -1,18 +1,26 @@
 
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import type { SearchResult } from '../../scraper';
+import type { SearchResult, Scraper, SearchOptions } from '../../scraper';
 
-export class CyklobazarScraper {
+export class CyklobazarScraper implements Scraper {
     private readonly baseUrl = 'https://www.cyklobazar.cz';
 
     /**
      * Verifies if the found item title is relevant to the search query.
      * Uses strict token matching for short queries to avoid partial matches (e.g. "lístky" -> "pístky").
      */
-    private verifyRelevance(title: string, query: string): boolean {
+    private verifyRelevance(title: string, query: string, options?: SearchOptions): boolean {
         // clean strings: lowercase, remove special chars except spaces/alphanumeric
         const clean = (s: string) => s.toLowerCase().replace(/[^\w\sěščřžýáíéúůďťň]/g, '').trim();
+        const lowerTitle = title.toLowerCase();
+
+        // User-provided negative keywords
+        if (options?.negativeKeywords && options.negativeKeywords.length > 0) {
+            if (options.negativeKeywords.some(nk => lowerTitle.includes(nk))) {
+                return false;
+            }
+        }
 
         const qTokens = clean(query).split(/\s+/).filter(t => t.length > 1);
         const titleTokens = clean(title).split(/\s+/);
@@ -32,7 +40,8 @@ export class CyklobazarScraper {
         return true;
     }
 
-    async search(query: string, maxPrice?: number): Promise<SearchResult[]> {
+    async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+        const maxPrice = options?.maxPrice;
         const queryLower = query.toLowerCase();
 
         try {
@@ -87,7 +96,7 @@ export class CyklobazarScraper {
                     if (maxPrice && price > maxPrice) return;
 
                     // Verify relevance using the class method
-                    if (!this.verifyRelevance(title, query)) return;
+                    if (!this.verifyRelevance(title, query, options)) return;
 
                     results.push({
                         title,
