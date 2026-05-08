@@ -98,6 +98,16 @@ export class CyklobazarScraper implements Scraper {
                     // Verify relevance using the class method
                     if (!this.verifyRelevance(title, query, options)) return;
 
+                    // Accessory noise filter (similar to other scrapers)
+                    const lowerTitle = title.toLowerCase();
+                    const lowerQuery = query.toLowerCase();
+                    const accessoryRegex = /\b(?:skl\w*|kryt|obal|pouzd(?:ro)?|case|drž\w*|drzh|krab|box)\b/i;
+                    const negativeKeywordsFromOptions = options?.negativeKeywords || [];
+                    const queryHasAccessory = negativeKeywordsFromOptions.some(nk => lowerQuery.includes(nk));
+                    if (accessoryRegex.test(lowerTitle) && !queryHasAccessory) {
+                        return;
+                    }
+
                     results.push({
                         title,
                         price,

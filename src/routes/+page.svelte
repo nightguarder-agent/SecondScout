@@ -1,4 +1,5 @@
 <script lang="ts">
+    import VersionInfo from '../lib/components/VersionInfo.svelte';
     interface SearchResult {
         title: string;
         price: number;
@@ -345,5 +346,6 @@
                 </div>
             </div>
         {/if}
+        <VersionInfo />
     </div>
 </div>
